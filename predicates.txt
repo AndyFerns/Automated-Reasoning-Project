@@ -1,0 +1,3 @@
+friends(Andrew, Chris)
+drink(Andrew, coffee)
+playing(Ranjeet, games)
