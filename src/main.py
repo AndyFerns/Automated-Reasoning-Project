@@ -42,8 +42,8 @@ class PredicateExtractor:
                 file.write(f"{predicate}\n")
 
 if __name__ == "__main__":
-    # text = "John reads books. Mary loves programming. The dog chases the cat."
-    text = "Andrew friends with Chris. Andrew likes to drink coffee. Ranjeet likes playing games."
+    with open(r"C:\Users\write\OneDrive\Documents\College Docs\Projects\Automated Reasoning Project\testing\sample statements.txt", "r") as file:
+        text = file.read()
     extractor = PredicateExtractor()
     predicates = extractor.extract_predicates(text)
     
