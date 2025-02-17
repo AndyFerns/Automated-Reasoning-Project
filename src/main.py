@@ -1,16 +1,21 @@
 """
-A demonstration of a forward-chaining reasoning engine that attempts to 
-parse natural language input into facts and rules (using heuristics) and then
-infers additional facts. This code is very limited and meant only as a proof-of-concept.
+An advanced system that integrates:
+  • Robust natural language parsing (using spaCy)
+  • Conversion of parsed sentences to first-order logic (FOL) in clause form
+  • A resolution engine for FOL inspired by Prolog's techniques
+
+This version allows you to input your statements (facts and rules)
+and your query via the command line. The system will automatically
+parse the input, build the knowledge base, and attempt to prove the query.
 """
 
+import spacy
 import nltk
 import re
 import copy
 
 nltk.download('punkt', quiet=True)
-nltk.download('averaged_perceptron_tagger', quiet=True)
-
+nlp = spacy.load("en_core_web_sm")
 
 def is_variable(term):
     return isinstance(term, str) and term.startswith('?')
@@ -58,11 +63,6 @@ def substitute(term, subs):
 
 class Fact:
     def __init__(self, predicate, args, positive=True):
-        """
-        predicate: string name (e.g., "works_hard")
-        args: tuple of arguments (e.g., ("jack",) or ("jack", "job"))
-        positive: True means a positive fact; False for negation.
-        """
         self.predicate = predicate
         self.args = tuple(args)
         self.positive = positive
@@ -85,242 +85,213 @@ class Fact:
 
 class Rule:
     def __init__(self, antecedents, consequent):
-        """
-        antecedents: a list of Fact objects (conditions, which may contain variables)
-        consequent: a Fact (possibly with variables) that should follow.
-        """
-        self.antecedents = antecedents
-        self.consequent = consequent
+        self.antecedents = antecedents  # list of Fact objects
+        self.consequent = consequent    # a Fact object
 
     def __repr__(self):
-        ants = " and ".join(map(str, self.antecedents))
-        return f"If {ants} then {self.consequent}"
+        ants = ", ".join(map(str, self.antecedents))
+        return f"{self.consequent} :- {ants}"
 
-class ReasoningEngine:
+
+class Literal:
+    def __init__(self, predicate, args, positive=True):
+        self.predicate = predicate
+        self.args = tuple(args)
+        self.positive = positive
+
+    def __eq__(self, other):
+        return (self.predicate == other.predicate and 
+                self.args == other.args and 
+                self.positive == other.positive)
+
+    def __hash__(self):
+        return hash((self.predicate, self.args, self.positive))
+
+    def __repr__(self):
+        sign = "" if self.positive else "~"
+        return f"{sign}{self.predicate}({', '.join(self.args)})"
+
+def fact_to_literal(fact):
+    return Literal(fact.predicate, fact.args, fact.positive)
+
+def rule_to_clause(rule):
+    clause = set()
+    clause.add(fact_to_literal(rule.consequent))
+    for ant in rule.antecedents:
+        lit = fact_to_literal(ant)
+        lit.positive = not lit.positive  # negate antecedents
+        clause.add(lit)
+    return frozenset(clause)
+
+def fact_to_clause(fact):
+    return frozenset({fact_to_literal(fact)})
+
+def apply_substitution_clause(clause, subs):
+    new_clause = set()
+    for lit in clause:
+        new_args = tuple(substitute(arg, subs) for arg in lit.args)
+        new_clause.add(Literal(lit.predicate, new_args, lit.positive))
+    return frozenset(new_clause)
+
+def resolve_clauses(ci, cj):
+    resolvents = set()
+    for li in ci:
+        for lj in cj:
+            if li.predicate == lj.predicate and li.positive != lj.positive:
+                subs = unify(li.args, lj.args, {})
+                if subs is not None:
+                    new_ci = set(ci)
+                    new_cj = set(cj)
+                    new_ci.remove(li)
+                    new_cj.remove(lj)
+                    new_clause = new_ci.union(new_cj)
+                    new_clause = apply_substitution_clause(new_clause, subs)
+                    resolvents.add(new_clause)
+    return resolvents
+
+
+class FOLResolutionEngine:
     def __init__(self):
-        self.facts = set()
-        self.rules = []
+        self.clauses = set()
 
     def add_fact(self, fact):
-        self.facts.add(fact)
+        self.clauses.add(fact_to_clause(fact))
 
     def add_rule(self, rule):
-        self.rules.append(rule)
+        self.clauses.add(rule_to_clause(rule))
 
-    def infer(self):
-        """Run forward chaining until no new facts can be derived."""
-        added = True
-        while added:
-            added = False
-            for rule in self.rules:
-                substitutions = self.match_antecedents(rule.antecedents, self.facts)
-                for subs in substitutions:
-                    new_fact = rule.consequent.substitute(subs)
-                    if new_fact not in self.facts:
-                        # Uncomment the next line to see each inference step:
-                        print(f"Inferred: {new_fact} via {rule} with substitution {subs}")
-                        self.facts.add(new_fact)
-                        added = True
+    def add_knowledge_base(self, statements):
+        for stmt in statements:
+            if isinstance(stmt, Fact):
+                self.add_fact(stmt)
+            elif isinstance(stmt, Rule):
+                self.add_rule(stmt)
 
-    def match_antecedents(self, antecedents, facts, subs=None):
-        """Recursively match a list of antecedents against known facts."""
-        if subs is None:
-            subs = {}
-        if not antecedents:
-            return [subs]
-        first, rest = antecedents[0], antecedents[1:]
-        results = []
-        for fact in facts:
-            if fact.predicate == first.predicate and fact.positive == first.positive:
-                subs_new = unify(first.args, fact.args, subs)
-                if subs_new is not None:
-                    for subs_final in self.match_antecedents(rest, facts, subs_new):
-                        results.append(subs_final)
-        return results
-
-    def query(self, query_fact):
-        """Return True if any known fact unifies with query_fact."""
-        for fact in self.facts:
-            if fact.predicate == query_fact.predicate and fact.positive == query_fact.positive:
-                subs = unify(query_fact.args, fact.args, {})
-                if subs is not None:
+    def resolution(self, query):
+        negated_query = Fact(query.predicate, query.args, positive=not query.positive)
+        clauses = self.clauses.copy()
+        clauses.add(fact_to_clause(negated_query))
+        new = set()
+        while True:
+            pairs = [(ci, cj) for ci in clauses for cj in clauses if ci != cj]
+            for (ci, cj) in pairs:
+                resolvents = resolve_clauses(ci, cj)
+                if frozenset() in resolvents:
                     return True
-        return False
+                new = new.union(resolvents)
+            if new.issubset(clauses):
+                return False
+            clauses = clauses.union(new)
 
-    def get_facts(self, predicate=None):
-        if predicate:
-            return [f for f in self.facts if f.predicate == predicate]
-        return list(self.facts)
-
-
-class NaturalLanguageParser:
+class RobustNLUParser:
     def __init__(self):
-        # Used to generate new constant names for existentially quantified entities.
         self.entity_count = 0
 
     def new_entity(self):
         self.entity_count += 1
         return f"entity{self.entity_count}"
 
-    def parse_text(self, text):
-        """
-        Splits the input text into sentences and attempts to parse each as either
-        a fact or a rule.
-        """
-        sentences = nltk.sent_tokenize(text)
-        parsed_statements = []
-        for sentence in sentences:
-            sentence = sentence.strip().rstrip(".!?")
-            lower = sentence.lower()
-            if "if" in lower and "then" in lower:
-                rule = self.parse_rule(sentence)
-                if rule:
-                    parsed_statements.append(rule)
-            elif lower.startswith("everyone") or lower.startswith("all"):
-                rule = self.parse_universal(sentence)
-                if rule:
-                    parsed_statements.append(rule)
-            elif lower.startswith("somebody") or lower.startswith("someone"):
-                fact = self.parse_existential(sentence)
-                if fact:
-                    parsed_statements.append(fact)
-            else:
-                fact = self.parse_fact(sentence)
-                if fact:
-                    parsed_statements.append(fact)
-        return parsed_statements
+    def parse_sentence(self, sentence):
+        doc = nlp(sentence)
+        if any(tok.lower_ == "if" for tok in doc) and any(tok.lower_ == "then" for tok in doc):
+            return self.parse_implication(sentence)
+        else:
+            return self.parse_fact(sentence)
 
-    def parse_rule(self, sentence):
-        """
-        Very naively splits a sentence of the form:
-          "If <antecedents> then <consequent>"
-        into antecedents and conclusion, and parses each part.
-        """
-        parts = re.split(r'\bthen\b', sentence, flags=re.IGNORECASE)
+    def parse_implication(self, sentence):
+        parts = sentence.split("then")
         if len(parts) < 2:
             return None
-        antecedent_part = parts[0]
-        # Remove leading "if" (if present)
-        antecedent_part = re.sub(r'^\s*if\s+', '', antecedent_part, flags=re.IGNORECASE).strip()
-        conclusion_part = parts[1].strip()
-        # If multiple antecedents are joined by "and", split them.
-        antecedent_sentences = re.split(r'\band\b', antecedent_part, flags=re.IGNORECASE)
-        antecedents = []
-        for ant in antecedent_sentences:
-            fact = self.parse_fact(ant.strip())
-            if fact:
-                antecedents.append(fact)
-        conclusion = self.parse_fact(conclusion_part)
-        if not antecedents or conclusion is None:
-            return None
-        return Rule(antecedents, conclusion)
+        antecedent_text = parts[0]
+        antecedent_text = re.sub(r'^\s*if\s+', '', antecedent_text, flags=re.IGNORECASE)
+        consequent_text = parts[1]
+        antecedents = self.extract_facts(antecedent_text)
+        consequent = self.extract_fact(consequent_text)
+        if antecedents and consequent:
+            # If consequent's subject is a pronoun (or not a proper name), replace it.
+            pronouns = {"he", "she", "it", "him", "her"}
+            subj_ant = antecedents[0].args[0]
+            # If consequent subject is missing or is a pronoun, use antecedent subject.
+            if not consequent.args or (consequent.args[0] in pronouns):
+                # Rebuild consequent with antecedent's subject.
+                new_args = (subj_ant,) + consequent.args[1:] if consequent.args else (subj_ant,)
+                consequent = Fact(consequent.predicate, new_args, positive=consequent.positive)
+        if antecedents and consequent:
+            return Rule(antecedents, consequent)
+        return None
 
-    def parse_fact(self, sentence):
-        """
-        A very simple heuristic fact parser that tokenizes the sentence and
-        tries to extract a subject, a verb, and (optionally) an object.
-        For example, "Jack works hard" becomes Fact("works", ("jack", "hard")).
-        """
-        tokens = nltk.word_tokenize(sentence)
-        if not tokens:
-            return None
-        tags = nltk.pos_tag(tokens)
+    def extract_facts(self, text):
+        parts = re.split(r'\band\b', text, flags=re.IGNORECASE)
+        facts = []
+        for part in parts:
+            fact = self.extract_fact(part)
+            if fact:
+                facts.append(fact)
+        return facts
+
+    def extract_fact(self, text):
+        doc = nlp(text)
         subject = None
-        verb = None
+        predicate = None
         obj = None
-        positive = True
-        if "not" in tokens:
-            positive = False
-            tokens.remove("not")
-        # Heuristically pick the first noun as subject, first verb as predicate,
-        # and (if available) the next noun as object.
-        for word, tag in tags:
-            if subject is None and tag in ["NNP", "NN", "PRP"]:
-                subject = word.lower()
-            elif verb is None and tag.startswith("VB"):
-                verb = word.lower()
-            elif obj is None and tag in ["NN", "NNS", "NNP", "PRP"]:
-                if subject and word.lower() != subject:
-                    obj = word.lower()
-        if subject is None or verb is None:
+        negated = False
+        for token in doc:
+            if token.dep_ in ("nsubj", "nsubjpass") and subject is None:
+                subject = token.text.lower()
+            if token.dep_ == "ROOT":
+                predicate = token.lemma_.lower()
+                for child in token.children:
+                    if child.dep_ == "neg":
+                        negated = True
+            if token.dep_ in ("dobj", "attr") and obj is None:
+                obj = token.text.lower()
+        if subject is None or predicate is None:
             return None
         if obj is None:
-            return Fact(verb, (subject,), positive)
-        return Fact(verb, (subject, obj), positive)
+            return Fact(predicate, (subject,), positive=not negated)
+        return Fact(predicate, (subject, obj), positive=not negated)
 
-    def parse_universal(self, sentence):
-        """
-        Attempts to convert a sentence that begins with "everyone" or "all" into a rule.
-        For example:
-          "Everyone in this class passed the first exam."
-        is heuristically transformed into a rule:
-          IF in_group(?x, this) THEN passed(..., with ?x as subject)
-        (This is a very limited interpretation.)
-        """
-        lower = sentence.lower()
-        if lower.startswith("everyone"):
-            remainder = sentence[len("everyone"):].strip()
-        elif lower.startswith("all"):
-            remainder = sentence[len("all"):].strip()
-        else:
-            remainder = sentence
-        antecedent = None
-        if " in " in remainder:
-            m = re.search(r'in ([\w\s]+)', remainder, flags=re.IGNORECASE)
-            if m:
-                group = m.group(1).strip().split()[0]
-                antecedent = Fact("in_group", ("?x", group))
-        if antecedent is None:
-            antecedent = Fact("person", ("?x",))
-        conclusion = self.parse_fact(sentence)
-        if conclusion is None:
-            return None
-        args = list(conclusion.args)
-        args[0] = "?x"
-        conclusion = Fact(conclusion.predicate, tuple(args), conclusion.positive)
-        return Rule([antecedent], conclusion)
+    def parse_fact(self, sentence):
+        return self.extract_fact(sentence)
 
-    def parse_existential(self, sentence):
-        """
-        For sentences starting with "somebody" or "someone", we generate a new entity name.
-        For example, "Somebody in the circus is a mole." might become:
-          Fact("is", (entity1, "mole"))
-        """
-        entity = self.new_entity()
-        fact = self.parse_fact(sentence)
-        if fact is None:
-            return None
-        args = list(fact.args)
-        args[0] = entity
-        return Fact(fact.predicate, tuple(args), fact.positive)
+    def parse_text(self, text):
+        sentences = nltk.sent_tokenize(text)
+        statements = []
+        for sent in sentences:
+            stmt = self.parse_sentence(sent)
+            if stmt:
+                statements.append(stmt)
+        return statements
 
 
 if __name__ == "__main__":
-    input_text = """
-    Jack works hard.
-    If Jack works hard, then he is a dull boy.
-    If Jack is a dull boy, then he will not get the job.
-    Everyone in this class passed the first exam.
-    Somebody in the circus is a mole.
-    """
-
-    print("Input text:")
-    print(input_text)
+    print("Enter your knowledge base statements (facts and rules).")
+    print("Enter one statement per line. When done, enter an empty line.")
+    kb_lines = []
+    while True:
+        line = input("> ")
+        if line.strip() == "":
+            break
+        kb_lines.append(line)
+    input_text = "\n".join(kb_lines)
     
-    parser = NaturalLanguageParser()
+    parser = RobustNLUParser()
     statements = parser.parse_text(input_text)
+    
     print("\nParsed Statements:")
-    for s in statements:
-        print(s)
+    for stmt in statements:
+        print(stmt)
     
-    engine = ReasoningEngine()
-    for s in statements:
-        if isinstance(s, Fact):
-            engine.add_fact(s)
-        elif isinstance(s, Rule):
-            engine.add_rule(s)
+    resolution_engine = FOLResolutionEngine()
+    resolution_engine.add_knowledge_base(statements)
     
-    engine.infer()
-    print("\nInferred Facts:")
-    for fact in engine.get_facts():
-        print(fact)
+    print("\nEnter your query (as a sentence):")
+    query_text = input("> ")
+    query_stmt = parser.parse_sentence(query_text)
+    
+    if query_stmt is None or not isinstance(query_stmt, Fact):
+        print("Unable to parse the query as a fact. Please check your input.")
+    else:
+        result = resolution_engine.resolution(query_stmt)
+        print("\nQuery:", query_stmt)
+        print("Query entailed by the knowledge base:", result)
