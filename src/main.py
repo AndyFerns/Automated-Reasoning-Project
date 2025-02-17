@@ -1,23 +1,21 @@
 """
-A simple automated reasoning engine example.
- - Representing facts such as: works_hard(jack)
- - Representing negated facts (e.g. not get_job(jack))
- - Rules that use variables (e.g. if student(?x) then passed_exam(?x))
- - A very basic forward chaining inference mechanism
-    - Querying for facts (e.g. is there a fact works_hard(jack)?)
+A demonstration of a forward-chaining reasoning engine that attempts to 
+parse natural language input into facts and rules (using heuristics) and then
+infers additional facts. This code is very limited and meant only as a proof-of-concept.
 """
 
+import nltk
+import re
 import copy
+
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
 
 
 def is_variable(term):
     return isinstance(term, str) and term.startswith('?')
 
 def unify(x, y, subs=None):
-    """
-    Try to unify two terms (which may be strings or tuples of terms)
-    given the current substitution dictionary.
-    """
     if subs is None:
         subs = {}
     if subs is False:
@@ -47,9 +45,6 @@ def unify_var(var, x, subs):
         return new_subs
 
 def substitute(term, subs):
-    """
-    Recursively substitute any variable in term using the subs dictionary.
-    """
     if isinstance(term, str):
         if is_variable(term) and term in subs:
             return subs[term]
@@ -64,9 +59,9 @@ def substitute(term, subs):
 class Fact:
     def __init__(self, predicate, args, positive=True):
         """
-        predicate: a string name (e.g. "works_hard")
-        args: a tuple (or list) of arguments (e.g. ("jack",))
-        positive: True for a positive fact, False for negation.
+        predicate: string name (e.g., "works_hard")
+        args: tuple of arguments (e.g., ("jack",) or ("jack", "job"))
+        positive: True means a positive fact; False for negation.
         """
         self.predicate = predicate
         self.args = tuple(args)
@@ -91,7 +86,7 @@ class Fact:
 class Rule:
     def __init__(self, antecedents, consequent):
         """
-        antecedents: list of Fact objects (they can contain variables like ?x)
+        antecedents: a list of Fact objects (conditions, which may contain variables)
         consequent: a Fact (possibly with variables) that should follow.
         """
         self.antecedents = antecedents
@@ -100,7 +95,7 @@ class Rule:
     def __repr__(self):
         ants = " and ".join(map(str, self.antecedents))
         return f"If {ants} then {self.consequent}"
-    
+
 class ReasoningEngine:
     def __init__(self):
         self.facts = set()
@@ -113,7 +108,7 @@ class ReasoningEngine:
         self.rules.append(rule)
 
     def infer(self):
-        """Run forward chaining until no new facts are added."""
+        """Run forward chaining until no new facts can be derived."""
         added = True
         while added:
             added = False
@@ -122,7 +117,8 @@ class ReasoningEngine:
                 for subs in substitutions:
                     new_fact = rule.consequent.substitute(subs)
                     if new_fact not in self.facts:
-                        print(f"Inferred: {new_fact} from rule: {rule} with subs {subs}") #line to see each inference step
+                        # Uncomment the next line to see each inference step:
+                        print(f"Inferred: {new_fact} via {rule} with substitution {subs}")
                         self.facts.add(new_fact)
                         added = True
 
@@ -143,9 +139,7 @@ class ReasoningEngine:
         return results
 
     def query(self, query_fact):
-        """
-        Returns True if there is any fact that unifies with query_fact.
-        """
+        """Return True if any known fact unifies with query_fact."""
         for fact in self.facts:
             if fact.predicate == query_fact.predicate and fact.positive == query_fact.positive:
                 subs = unify(query_fact.args, fact.args, {})
@@ -159,194 +153,174 @@ class ReasoningEngine:
         return list(self.facts)
 
 
-def test_Q1():
-    print("=== Q1 ===")
-    engine = ReasoningEngine()
-    # Premises:
-    # 1. Jack works hard.
-    engine.add_fact(Fact("works_hard", ("jack",)))
-    # 2. If Jack works hard, then he is a dull boy.
-    engine.add_rule(Rule([Fact("works_hard", ("jack",))],
-                         Fact("dull_boy", ("jack",))))
-    # 3. If Jack is a dull boy, then he will not get the job.
-    engine.add_rule(Rule([Fact("dull_boy", ("jack",))],
-                         Fact("get_job", ("jack",), positive=False)))
-    engine.infer()
-    result = engine.query(Fact("get_job", ("jack",), positive=False))
-    print("Proved: Jack will not get the job:", result)
-    print("Inferred facts:", engine.get_facts())
-    print()
+class NaturalLanguageParser:
+    def __init__(self):
+        # Used to generate new constant names for existentially quantified entities.
+        self.entity_count = 0
 
-def test_Q2():
-    print("=== Q2 ===")
-    engine = ReasoningEngine()
-    # Premises:
-    # "A student in this class has not read the book."
-    engine.add_fact(Fact("student", ("student1",)))
-    engine.add_fact(Fact("read_book", ("student1",), positive=False))
-    # "Everyone in this class passed the first exam."
-    engine.add_rule(Rule([Fact("student", ("?x",))],
-                         Fact("passed_exam", ("?x",))))
-    engine.infer()
-    # Query: Someone who passed the first exam has not read the book.
-    candidates = []
-    for fact in engine.facts:
-        if fact.predicate == "passed_exam" and fact.positive:
-            x = fact.args[0]
-            if Fact("read_book", (x,), positive=False) in engine.facts:
-                candidates.append(x)
-    result = len(candidates) > 0
-    print("Proved: Someone who passed the first exam has not read the book:", result)
-    print("Candidate(s):", candidates)
-    print("Inferred facts:", engine.get_facts())
-    print()
+    def new_entity(self):
+        self.entity_count += 1
+        return f"entity{self.entity_count}"
 
-def test_Q3():
-    print("=== Q3 ===")
-    engine = ReasoningEngine()
-    # Premises:
-    # "Somebody in the Circus is a mole."
-    engine.add_fact(Fact("circus_member", ("person1",)))
-    engine.add_fact(Fact("mole", ("person1",)))
-    # "Every person who is a mole hates Beggarman."
-    engine.add_rule(Rule([Fact("mole", ("?x",))],
-                         Fact("hates", ("?x", "Beggarman"))))
-    engine.infer()
-    # Query: There is a person in the Circus who hates Beggarman.
-    candidates = []
-    for fact in engine.facts:
-        if fact.predicate == "hates" and fact.positive:
-            x, target = fact.args
-            if target == "Beggarman" and Fact("circus_member", (x,)) in engine.facts:
-                candidates.append(x)
-    result = len(candidates) > 0
-    print("Proved: There is a person in the Circus who hates Beggarman:", result)
-    print("Candidate(s):", candidates)
-    print("Inferred facts:", engine.get_facts())
-    print()
+    def parse_text(self, text):
+        """
+        Splits the input text into sentences and attempts to parse each as either
+        a fact or a rule.
+        """
+        sentences = nltk.sent_tokenize(text)
+        parsed_statements = []
+        for sentence in sentences:
+            sentence = sentence.strip().rstrip(".!?")
+            lower = sentence.lower()
+            if "if" in lower and "then" in lower:
+                rule = self.parse_rule(sentence)
+                if rule:
+                    parsed_statements.append(rule)
+            elif lower.startswith("everyone") or lower.startswith("all"):
+                rule = self.parse_universal(sentence)
+                if rule:
+                    parsed_statements.append(rule)
+            elif lower.startswith("somebody") or lower.startswith("someone"):
+                fact = self.parse_existential(sentence)
+                if fact:
+                    parsed_statements.append(fact)
+            else:
+                fact = self.parse_fact(sentence)
+                if fact:
+                    parsed_statements.append(fact)
+        return parsed_statements
 
-def test_Q4():
-    print("=== Q4 ===")
-    engine = ReasoningEngine()
-    # Premises:
-    # "Whoever can read is literate."
-    engine.add_rule(Rule([Fact("can_read", ("?x",))],
-                         Fact("literate", ("?x",))))
-    # To allow reasoning by contraposition, add:
-    # "If someone is not literate, then they cannot read."
-    engine.add_rule(Rule([Fact("literate", ("?x",), positive=False)],
-                         Fact("can_read", ("?x",), positive=False)))
-    # "Dolphins are not literate." (For a dolphin, use "dolphin1")
-    engine.add_fact(Fact("literate", ("dolphin1",), positive=False))
-    engine.add_fact(Fact("dolphin", ("dolphin1",)))
-    # "Some dolphins are intelligent."
-    engine.add_fact(Fact("intelligent", ("dolphin1",)))
-    engine.infer()
-    # Query: Some who are intelligent cannot read.
-    candidates = []
-    for fact in engine.facts:
-        if fact.predicate == "intelligent" and fact.positive:
-            x = fact.args[0]
-            if Fact("can_read", (x,), positive=False) in engine.facts:
-                candidates.append(x)
-    result = len(candidates) > 0
-    print("Proved: Some who are intelligent cannot read:", result)
-    print("Candidate(s):", candidates)
-    print("Inferred facts:", engine.get_facts())
-    print()
+    def parse_rule(self, sentence):
+        """
+        Very naively splits a sentence of the form:
+          "If <antecedents> then <consequent>"
+        into antecedents and conclusion, and parses each part.
+        """
+        parts = re.split(r'\bthen\b', sentence, flags=re.IGNORECASE)
+        if len(parts) < 2:
+            return None
+        antecedent_part = parts[0]
+        # Remove leading "if" (if present)
+        antecedent_part = re.sub(r'^\s*if\s+', '', antecedent_part, flags=re.IGNORECASE).strip()
+        conclusion_part = parts[1].strip()
+        # If multiple antecedents are joined by "and", split them.
+        antecedent_sentences = re.split(r'\band\b', antecedent_part, flags=re.IGNORECASE)
+        antecedents = []
+        for ant in antecedent_sentences:
+            fact = self.parse_fact(ant.strip())
+            if fact:
+                antecedents.append(fact)
+        conclusion = self.parse_fact(conclusion_part)
+        if not antecedents or conclusion is None:
+            return None
+        return Rule(antecedents, conclusion)
 
-def test_Q5():
-    print("=== Q5 ===")
-    engine = ReasoningEngine()
-    # Premises:
-    # "All wolves howl at night." => if wolf(x) then howl_at_night(x)
-    engine.add_rule(Rule([Fact("wolf", ("?x",))],
-                         Fact("howl_at_night", ("?x",))))
-    # "Anyone who has a horse will not have donkeys." => if has_horse(x) then not has_donkey(x)
-    engine.add_rule(Rule([Fact("has_horse", ("?x",))],
-                         Fact("has_donkey", ("?x",), positive=False)))
-    # "Early risers do not have anything which howl at night."
-    # We simplify this by stating: if early_riser(x) then x does not have a wolf.
-    engine.add_rule(Rule([Fact("early_riser", ("?x",))],
-                         Fact("wolf", ("?x",), positive=False)))
-    # "Andrew has either a horse or a wolf." – for consistency with early risers, we choose:
-    engine.add_fact(Fact("has_horse", ("Andrew",)))
-    engine.add_fact(Fact("early_riser", ("Andrew",)))
-    engine.infer()
-    # Query: If Andrew is an early riser, then he does not have any donkeys.
-    result = engine.query(Fact("has_donkey", ("Andrew",), positive=False))
-    print("Proved: If Andrew is an early riser, then he does not have any donkeys:", result)
-    print("Inferred facts:", engine.get_facts())
-    print()
+    def parse_fact(self, sentence):
+        """
+        A very simple heuristic fact parser that tokenizes the sentence and
+        tries to extract a subject, a verb, and (optionally) an object.
+        For example, "Jack works hard" becomes Fact("works", ("jack", "hard")).
+        """
+        tokens = nltk.word_tokenize(sentence)
+        if not tokens:
+            return None
+        tags = nltk.pos_tag(tokens)
+        subject = None
+        verb = None
+        obj = None
+        positive = True
+        if "not" in tokens:
+            positive = False
+            tokens.remove("not")
+        # Heuristically pick the first noun as subject, first verb as predicate,
+        # and (if available) the next noun as object.
+        for word, tag in tags:
+            if subject is None and tag in ["NNP", "NN", "PRP"]:
+                subject = word.lower()
+            elif verb is None and tag.startswith("VB"):
+                verb = word.lower()
+            elif obj is None and tag in ["NN", "NNS", "NNP", "PRP"]:
+                if subject and word.lower() != subject:
+                    obj = word.lower()
+        if subject is None or verb is None:
+            return None
+        if obj is None:
+            return Fact(verb, (subject,), positive)
+        return Fact(verb, (subject, obj), positive)
 
-def test_Q6():
-    print("=== Q6 ===")
-    # For Q6 we use candidate elimination (since it involves disjunction)
-    # Premises:
-    # - One of Tinker, Tailor, Soldier, and Spy is the mole.
-    # - The mole was not present at the dinner party.
-    # - Spy was attending the dinner party.
-    # - The mole smokes Havana cigars and always wears a green shirt at home.
-    # - Soldier does not smoke.
-    # - Tinker was wearing a pink shirt at home.
-    # - Anything coloured pink is not green.
-    #
-    # We can eliminate:
-    # - Spy (attended dinner, but mole was absent)
-    # - Soldier (does not smoke, but mole smokes)
-    # - Tinker (wears pink, so cannot be green as required)
-    # Remaining candidate: Tailor.
-    candidates = {"Tinker", "Tailor", "Soldier", "Spy"}
-    candidates.discard("Spy")
-    candidates.discard("Soldier")
-    candidates.discard("Tinker")
-    print("Determined: The mole is", candidates)
-    print()
+    def parse_universal(self, sentence):
+        """
+        Attempts to convert a sentence that begins with "everyone" or "all" into a rule.
+        For example:
+          "Everyone in this class passed the first exam."
+        is heuristically transformed into a rule:
+          IF in_group(?x, this) THEN passed(..., with ?x as subject)
+        (This is a very limited interpretation.)
+        """
+        lower = sentence.lower()
+        if lower.startswith("everyone"):
+            remainder = sentence[len("everyone"):].strip()
+        elif lower.startswith("all"):
+            remainder = sentence[len("all"):].strip()
+        else:
+            remainder = sentence
+        antecedent = None
+        if " in " in remainder:
+            m = re.search(r'in ([\w\s]+)', remainder, flags=re.IGNORECASE)
+            if m:
+                group = m.group(1).strip().split()[0]
+                antecedent = Fact("in_group", ("?x", group))
+        if antecedent is None:
+            antecedent = Fact("person", ("?x",))
+        conclusion = self.parse_fact(sentence)
+        if conclusion is None:
+            return None
+        args = list(conclusion.args)
+        args[0] = "?x"
+        conclusion = Fact(conclusion.predicate, tuple(args), conclusion.positive)
+        return Rule([antecedent], conclusion)
 
-def test_Q7():
-    print("=== Q7 ===")
-    # For Q7 we build a simple family tree and then determine the aunt.
-    #
-    # Premises:
-    # - Jack is father of Jess and Lily.
-    # - Helen is mother of Jess and Lily.
-    # - Oliver and Sophie are father and mother of James.
-    # - Simon is son of Jess.
-    # - Marcus is father of Simon.
-    # - Lily and James are mother and father of Harry.
-    #
-    # We assume (from names) that Jess, Helen, Lily, and Sophie are female.
-    parents = {
-        "Jess": {"Jack", "Helen"},
-        "Lily": {"Jack", "Helen"},
-        "James": {"Oliver", "Sophie"},
-        "Simon": {"Jess"},  
-        "Harry": {"Lily", "James"}
-    }
-    female = {"Helen", "Lily", "Jess", "Sophie"}
-    
-    def siblings(person):
-        sibs = set()
-        for other, pars in parents.items():
-            if other != person and len(parents.get(person, set()).intersection(pars)) > 0:
-                sibs.add(other)
-        return sibs
-
-
-    aunts = set()
-    for parent in parents["Harry"]:
-        for sib in siblings(parent):
-            if sib in female:
-                aunts.add(sib)
-    print("Determined: The aunt of Harry is", aunts)
-    print()
+    def parse_existential(self, sentence):
+        """
+        For sentences starting with "somebody" or "someone", we generate a new entity name.
+        For example, "Somebody in the circus is a mole." might become:
+          Fact("is", (entity1, "mole"))
+        """
+        entity = self.new_entity()
+        fact = self.parse_fact(sentence)
+        if fact is None:
+            return None
+        args = list(fact.args)
+        args[0] = entity
+        return Fact(fact.predicate, tuple(args), fact.positive)
 
 
 if __name__ == "__main__":
-    test_Q1()
-    test_Q2()
-    test_Q3()
-    test_Q4()
-    test_Q5()
-    test_Q6()
-    test_Q7()
+    input_text = """
+    Jack works hard.
+    If Jack works hard, then he is a dull boy.
+    If Jack is a dull boy, then he will not get the job.
+    Everyone in this class passed the first exam.
+    Somebody in the circus is a mole.
+    """
+
+    print("Input text:")
+    print(input_text)
+    
+    parser = NaturalLanguageParser()
+    statements = parser.parse_text(input_text)
+    print("\nParsed Statements:")
+    for s in statements:
+        print(s)
+    
+    engine = ReasoningEngine()
+    for s in statements:
+        if isinstance(s, Fact):
+            engine.add_fact(s)
+        elif isinstance(s, Rule):
+            engine.add_rule(s)
+    
+    engine.infer()
+    print("\nInferred Facts:")
+    for fact in engine.get_facts():
+        print(fact)
