@@ -9,11 +9,11 @@ Jack will not get the job.
 
 Q 2
 
- A student in this class has not read the book
-Everyone in this class passed the first exam
+A student in this class has not read the book.
+Everyone in this class passed the first exam.
 
 Prove that:
-Someone who passed the first exam has not read the book
+Someone who passed the first exam has not read the book.
 
 Q 3
 

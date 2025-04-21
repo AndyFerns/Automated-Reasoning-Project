@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Reasoning</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="menu-bar">
+        <div class="menu-item">File</div>
+        <div class="menu-item">Edit</div>
+        <div class="menu-item">View</div>
+        <div class="menu-item">Tools</div>
+        <div class="menu-item">Help</div>
+    </div>
+
+    <div class="container">
+        <div class="panel input-panel">
+            <div class="panel-header">
+                <span>Enter your statements here</span>
+                <div class="panel-actions">
+                    <button class="assert-btn">Assert</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="input1" spellcheck="false"></textarea>
+            </div>
+        </div>
+
+        <div class="resize-handle" id="resize1"></div>
+
+        <div class="panel input-panel">
+            <div class="panel-header">
+                <span>Enter your queries here</span>
+                <div class="panel-actions">
+                    <button class="query-btn">Query</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="input2" spellcheck="false"></textarea>
+            </div>
+        </div>
+
+        <div class="resize-handle" id="resize2"></div>
+
+        <div class="panel output-panel">
+            <div class="panel-header">
+                <span>Output</span>
+                <div class="panel-actions">
+                    <button class="query-btn">Query</button>
+                    <button class="save-btn">Save</button>
+                    <button class="export-btn">Export to Neo4j</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <textarea id="output" spellcheck="false" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-message">Ready</span>
+    </div>
+
+    <!-- Export to Neo4j Modal -->
+    <div class="modal" id="export-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Export to Neo4j</div>
+                <div class="close-modal">&times;</div>
+            </div>
+            <div class="form-group">
+                <label for="neo4j-uri">URI</label>
+                <input type="text" id="neo4j-uri" placeholder="bolt://localhost:7687">
+            </div>
+            <div class="form-group">
+                <label for="neo4j-user">Username</label>
+                <input type="text" id="neo4j-user" placeholder="neo4j">
+            </div>
+            <div class="form-group">
+                <label for="neo4j-password">Password</label>
+                <input type="password" id="neo4j-password" placeholder="password">
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-export">Cancel</button>
+                <button id="confirm-export">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
