@@ -48,6 +48,7 @@ class SemanticParser:
             return self._parse_conditional(sentence)
         if sentence.lower().startswith("is "):
             return self._parse_query_fact(sentence)
+        
         # special overrides
         if "not read the book" in sentence:
             subj = self._extract_subject(sentence).replace(" ", "_")
@@ -60,12 +61,41 @@ class SemanticParser:
         if any(token.lower_ in {"some", "a", "an"} for token in doc):
             return self._parse_existential(sentence, doc)
         return self._parse_fact(sentence, doc)
+    
+    def _convert_do_query(self, core: str) -> str:
+        # e.g. 'socrates have an apple'
+        # feed into fact parser
+        return self._parse_fact(core)
 
     def parse_query(self, sentence: str) -> str:
-        sentence = sentence.strip().rstrip("?").lower()
-        if sentence.startswith("is "):
-            return self._parse_query_fact(sentence)
-        return self.parse_sentence(sentence)
+        
+        """
+        Convert a query in either English (Is/Are/Does/Can/...) or raw Prolog
+        into a Prolog predicate string.
+        """
+        # Clean up and normalize
+        sentence_clean = sentence.strip().rstrip("?").strip()
+        if not sentence_clean:
+            raise ValueError("Empty query provided.")
+        sentence_low = sentence_clean.lower()
+        # Split to identify auxiliary
+        tokens = sentence_low.split()
+        aux = tokens[0]
+        # Handle 'is' and 'are' as unary/binary queries
+        if aux in {"is", "are"}:
+            # e.g. "Is Andrew a man" or "Are dolphins intelligent"
+            return self._parse_query_fact(sentence_low)
+        # Handle 'does', 'do', 'can', 'could', 'should', 'will', 'did', etc.
+        if aux in {"does", "do", "can", "could", "should", "will", "did"}:
+            # Strip the auxiliary and parse the core as a fact relationship
+            core = re.sub(rf"^{aux}\s+", "", sentence_low)
+            return self._parse_fact(core)
+        # Fallback: maybe already raw Prolog or a declarative English fact
+        # Detect raw Prolog by parentheses pattern
+        if "(" in sentence_clean and ")" in sentence_clean:
+            return sentence_clean.rstrip('.')
+        # Otherwise, treat as an English declarative
+        return self.parse_sentence(sentence_clean)
 
     def assert_knowledge(self, sentences):
         """
@@ -113,25 +143,43 @@ class SemanticParser:
         return f"{then_pred} :- {cond_pred}"
 
     def _parse_universal(self, sentence: str, doc) -> str:
+        # Handle sentences like 'All men are mortal' -> mortal(X) :- men(X)
+        # Identify quantifier and subject noun
         quantifier = None
         subject = None
         for token in doc:
             if token.lower_ in {"all", "every", "each"}:
                 quantifier = token.lower_
+                # find the noun following quantifier
                 for child in token.children:
                     if child.pos_ in {"NOUN", "PROPN"}:
-                        subject = child.text.lower(); break
+                        subject = child.text.lower()
+                        break
                 if not subject:
+                    # fallback: first noun in doc
                     for t2 in doc:
                         if t2.pos_ in {"NOUN", "PROPN"}:
-                            subject = t2.text.lower(); break
+                            subject = t2.text.lower()
+                            break
                 break
         if not subject:
             raise ValueError("Could not determine universal subject.")
-        subject = subject.replace(" ", "_")
-        var = "X"
-        remaining = re.sub(rf"\b({quantifier})\s+{subject}\b", var, sentence, flags=re.IGNORECASE)
-        return self._convert_to_predicate(remaining, var)
+        subject_var = "X"
+        # Construct body predicate: subject(X)
+        body = f"{subject}({subject_var})"
+        # Extract the predicate part (after 'are' or 'is')
+        lower_sent = sentence.lower()
+        if " are " in lower_sent:
+            parts = lower_sent.split(" are ", 1)
+            pred_text = parts[1]
+        elif " is " in lower_sent:
+            parts = lower_sent.split(" is ", 1)
+            pred_text = parts[1]
+        else:
+            pred_text = lower_sent
+        # Build head predicate using the same variable
+        head = self._convert_to_predicate(pred_text, subject_var)
+        return f"{head} :- {body}"
 
     def _parse_existential(self, sentence: str, doc) -> str:
         # For simple existential facts ("Some dolphins are intelligent"), treat as a fact
@@ -180,6 +228,7 @@ class SemanticParser:
             obj_t  = next((c for c in root.children if c.dep_ in ('dobj','pobj','obj')), None)
             if subj_t and obj_t:
                 return f"{re.sub(r"[^\w]","_",root.text.lower())}({subj_t.text.replace(' ','_')}, {obj_t.text.replace(' ','_')})"
+            
         # ... rest of is-pattern logic unchanged ...
         words = sentence_lower.split()
         if default_subject and words and words[0] in PRONOUNS:
@@ -187,6 +236,7 @@ class SemanticParser:
             sentence_lower = " ".join(words[1:]).strip()
         else:
             subj = None
+            joined = " ".join(words)
         if " is " in sentence_lower:
             parts = sentence_lower.split(" is ",1)
             if subj is None: subj = parts[0].strip()
@@ -203,6 +253,7 @@ class SemanticParser:
                     objs = [x.strip().replace(' ','_') for x in o.split(" and ")]
                 return "\n".join(f"{name}({subj}, {x})" for x in objs)
             return f"{re.sub(r"[^\w]","_",rem)}({subj})"
+        
         # fallback
         if not doc:
             doc = self.nlp_processor.process_text(sentence)
@@ -216,8 +267,11 @@ class SemanticParser:
                 if tok.pos_ in {"NOUN","PROPN"}:
                     subj = tok.text.lower(); break
         if subj is None:
-            raise ValueError("No subject found in fact.")
-        subj = subj.replace(" ","_")
+            if subj is None:
+                m = re.match(r"^(?P<subj>\w+)\s+(?:a|an)\s+(?P<pred>.+)$", joined)
+                if m:
+                    name = re.sub(r"[^\w]","_",re.sub(r"^(?:a|an|the)\s+","",m.group('pred'),flags=re.IGNORECASE))
+                    return f"{name}({m.group('subj')})"
         return self._convert_to_predicate(sentence_lower, subj)
 
     # include all other helper methods unchanged:

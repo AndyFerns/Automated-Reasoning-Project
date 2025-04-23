@@ -2,7 +2,7 @@ Q 1
 
 Jack works hard.
 If Jack works hard, then he is a dull boy.
-If Jack is a dull boy, then will not get the job.
+If Jack is a dull boy, then he will not get the job.
 
 Prove that:
 Jack will not get the job.
@@ -25,7 +25,7 @@ There is a person in the Circus who hates Beggarman.
 
 Q 4
 
- Whoever can read is literate.  
+Whoever can read is literate.  
 Dolphins are not literate.  
 Some dolphins are intelligent.
 
@@ -62,4 +62,5 @@ Oliver and Sophie are father and mother of James.
 Simon is son of Jess. Marcus is father of Simon.
 Lily and James are mother and father of Harry.
 
-Find out who is the aunt of Harry
+Find out:
+Who is the aunt of Harry
