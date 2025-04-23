@@ -80,27 +80,28 @@ async function assertStatement(sentence) {
     }
 }
 
-async function queryKnowledgeBase(query) {
+async function queryKnowledgeBase(rawQuery) {
     try {
         setStatus('Querying knowledge base...');
-        const response = await fetch(`${API_BASE_URL}/query?q=${encodeURIComponent(query)}`, {
-            credentials: 'include'
+        const response = await fetch(`${API_BASE_URL}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ query: rawQuery })
         });
-        
         const data = await response.json();
-        
-        if (response.ok) {
-            setStatus('Query executed successfully');
-            return data.results;
-        } else {
+        if (!response.ok) {
             throw new Error(data.error || 'Failed to execute query');
         }
+        setStatus('Query executed successfully');
+        return data; // { parsed_query, results }
     } catch (error) {
         setStatus(`Error: ${error.message}`);
         console.error('Query error:', error);
         throw error;
     }
 }
+
 
 async function saveKnowledgeBase(filename = 'knowledge_base.pl') {
     try {
@@ -173,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const result = await assertStatement(text);
                     output.value += `Asserted: ${JSON.stringify(result)}\n\n`;
-                    textarea.value = ''; // Clear input after asserting
+                    // textarea.value = ''; // Clear input after asserting
                 } catch (error) {
                     output.value += `Error: ${error.message}\n\n`;
                 }
@@ -181,18 +182,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.querySelector('.query-btn').addEventListener('click', async function() {
-        const query = prompt('Enter your query:');
-        if (query) {
+    // Full snippet in context:
+    document.querySelectorAll('.query-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            const panel = button.closest('.panel');
+            const input = panel.querySelector('textarea');
+        
+            // locate output box
+            let output = panel.querySelector('textarea.output');
+            if (!output) output = document.getElementById('output');
+        
+            const rawQuery = input.value.trim();
+            if (!rawQuery) return;
+        
+            output.value += `> Raw: ${rawQuery}\n`;
+        
             try {
-                const results = await queryKnowledgeBase(query);
-                output.value += `Query: ${query}\nResults: ${JSON.stringify(results, null, 2)}\n\n`;
-            } catch (error) {
-                output.value += `Error: ${error.message}\n\n`;
+                const { parsed_query, results } = await queryKnowledgeBase(rawQuery);
+                output.value += `> Parsed: ${parsed_query}\n`;
+        
+                if (Array.isArray(results) && results.length) {
+                    results.forEach(r => output.value += JSON.stringify(r) + '\n');
+                    output.value += 'True \n';      
+                } else {
+                    output.value += 'No results found\n';
+                }
+            } catch (err) {
+                    output.value += `Error: ${err.message}\n`;
             }
-        }
+            output.value += '\n';
+            output.scrollTop = output.scrollHeight;
+        });
     });
-
+      
     document.querySelector('.save-btn').addEventListener('click', async function() {
         const filename = prompt('Enter filename (default: knowledge_base.pl):', 'knowledge_base.pl');
         if (filename !== null) { // User didn't press cancel
