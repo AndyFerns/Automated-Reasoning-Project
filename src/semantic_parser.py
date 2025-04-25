@@ -78,18 +78,27 @@ class SemanticParser:
         if not sentence_clean:
             raise ValueError("Empty query provided.")
         sentence_low = sentence_clean.lower()
+        
         # Split to identify auxiliary
         tokens = sentence_low.split()
         aux = tokens[0]
+        
         # Handle 'is' and 'are' as unary/binary queries
         if aux in {"is", "are"}:
             # e.g. "Is Andrew a man" or "Are dolphins intelligent"
             return self._parse_query_fact(sentence_low)
+        
         # Handle 'does', 'do', 'can', 'could', 'should', 'will', 'did', etc.
         if aux in {"does", "do", "can", "could", "should", "will", "did"}:
             # Strip the auxiliary and parse the core as a fact relationship
             core = re.sub(rf"^{aux}\s+", "", sentence_low)
             return self._parse_fact(core)
+        
+        # ——— NEW: handle declarative queries like "Socrates is mortal" ———
+        # if it contains " is " or " are " (and isn’t raw Prolog), parse as a query
+        if re.search(r"\b(is|are)\b", sentence_low):
+            return self._parse_query_fact(sentence_low)
+        
         # Fallback: maybe already raw Prolog or a declarative English fact
         # Detect raw Prolog by parentheses pattern
         if "(" in sentence_clean and ")" in sentence_clean:
@@ -114,7 +123,7 @@ class SemanticParser:
 
     def prove_exists(self, query: str) -> bool:
         """
-        Return True if Prolog can satisfy the query (e.g. 'intelligent(X), \+ can_read(X)').
+        Return True if Prolog can satisfy the query (e.g. 'intelligent(X), \\+ can_read(X)').
         """
         results = list(self.prolog.query(query))
         return bool(results)
@@ -129,7 +138,7 @@ class SemanticParser:
         subj = self._extract_subject_from_pred(cond_pred)
         then_pred = self._parse_fact(then_txt, default_subject=subj)
         else_pred = self._parse_fact(else_txt, default_subject=subj)
-        return f"{then_pred} :- {cond_pred}\n{else_pred} :- \+ {cond_pred}"
+        return rf"{then_pred} :- {cond_pred}\n{else_pred} :- \+ {cond_pred}"
 
     def _parse_conditional(self, sentence: str) -> str:
         pattern = re.compile(r"^if\s+(.*?),\s*then\s+(.*)$", re.IGNORECASE)
@@ -143,8 +152,11 @@ class SemanticParser:
         return f"{then_pred} :- {cond_pred}"
 
     def _parse_universal(self, sentence: str, doc) -> str:
-        # Handle sentences like 'All men are mortal' -> mortal(X) :- men(X)
-        # Identify quantifier and subject noun
+        """
+        Handle sentences like 'All men are mortal' -> mortal(X) :- men(X)
+        Identify quantifier and subject noun
+        """
+        
         quantifier = None
         subject = None
         for token in doc:
@@ -153,13 +165,14 @@ class SemanticParser:
                 # find the noun following quantifier
                 for child in token.children:
                     if child.pos_ in {"NOUN", "PROPN"}:
-                        subject = child.text.lower()
+                        # use lemma to get singular form
+                        subject = child.lemma_.lower()
                         break
                 if not subject:
                     # fallback: first noun in doc
                     for t2 in doc:
                         if t2.pos_ in {"NOUN", "PROPN"}:
-                            subject = t2.text.lower()
+                            subject = t2.lemma_.lower()
                             break
                 break
         if not subject:
@@ -279,9 +292,29 @@ class SemanticParser:
 
     
     def _parse_query_fact(self, sentence: str) -> str:
+        """
+        Parse yes/no queries and transform them into Prolog predicate calls.
+        Handles:
+          - "Is X Y?" or "Are X Y?" → Y(X)
+          - "X is Y?" or "X are Y?" → Y(X)
+          - "Does X do Y?" / other auxiliaries handled elsewhere
+          - "The capital of France is Paris" → capital(France, Paris)
+        """
+        # normalize and strip question marks
         sentence = sentence.lower().strip(" ?")
-        if sentence.startswith("is "):
-            sentence = sentence[3:].strip()
+
+        # 1) leading "is/are X Y" → Y(X)
+        if sentence.startswith("is ") or sentence.startswith("are "):
+            # drop the auxiliary
+            rest = re.sub(r"^(?:is|are)\s+", "", sentence)
+            # split into subject and predicate
+            subj, pred = rest.split(" ", 1)
+            # remove articles
+            pred = re.sub(r"^(?:a|an|the)\s+", "", pred, flags=re.IGNORECASE)
+            pred_name = re.sub(r"[^\w]", "_", pred)
+            return f"{pred_name}({subj})"
+
+        # 2) "... of ... is ..." pattern
         if " of " in sentence and " is " in sentence:
             parts = sentence.split(" is ", 1)
             subject = parts[0].strip().replace(" ", "_")
@@ -290,6 +323,8 @@ class SemanticParser:
             pred_part = re.sub(r"^(?:a|an|the)\s+", "", pred_part, flags=re.IGNORECASE).strip()
             pred_name = re.sub(r"[^\w]", "_", pred_part)
             return f"{pred_name}({subject}, {obj.strip().replace(' ', '_')})"
+
+        # 3) fallback: split on the first " is " for declarative queries
         parts = sentence.split(" is ", 1)
         if len(parts) < 2:
             raise ValueError("Unable to parse query.")
@@ -297,6 +332,7 @@ class SemanticParser:
         remainder = re.sub(r"^(?:a|an|the)\s+", "", parts[1].strip(), flags=re.IGNORECASE)
         pred_name = re.sub(r"[^\w]", "_", remainder)
         return f"{pred_name}({subject})"
+
 
 
     def _convert_to_predicate(self, text: str, subject: str) -> str:
