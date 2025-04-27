@@ -185,3 +185,46 @@ textarea {
 .modal-actions button {
     margin-left: 10px;
 }
+
+/* property bar: hidden by default */
+#prop-bar.hidden {
+    display: none;
+}
+  
+/* styled panel sticking above the graph */
+#prop-bar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 250px;
+    max-height: 70%;
+    overflow-y: auto;
+    background: #3c3c3c;
+    border: 1px solid #1a1a1a;
+    padding: 10px;
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    z-index: 200;
+    font-size: 13px;
+}
+  
+/* close “×” */
+#prop-bar-close {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#prop-bar h4 {
+    margin-bottom: 8px;
+    font-size: 14px;
+    border-bottom: 1px solid #5c5c5c;
+    padding-bottom: 4px;
+}
+  
+#prop-list div {
+    margin-bottom: 4px;
+}
+  

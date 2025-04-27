@@ -1,3 +1,34 @@
+// State Persistence Helpers
+function saveState() {
+    try {
+        localStorage.setItem('input1', document.getElementById('input1').value);
+        localStorage.setItem('input2', document.getElementById('input2').value);
+        localStorage.setItem('output', document.getElementById('output').value);
+    } catch (e) {
+        console.warn('Could not save state:', e);
+    }
+}
+// Loads latest saved state
+function loadState() {
+    try {
+        const input1 = document.getElementById('input1');
+        const input2 = document.getElementById('input2');
+        const output = document.getElementById('output');
+        const v1 = localStorage.getItem('input1');
+        const v2 = localStorage.getItem('input2');
+        const v3 = localStorage.getItem('output');
+        if (v1 !== null) input1.value = v1;
+        if (v2 !== null) input2.value = v2; 
+        if (v3 !== null) output.value = v3;
+    } catch (e) {
+        console.warn('Could not load state:', e);
+    }
+}
+
+// Save state before navigating away
+window.addEventListener('beforeunload', saveState);
+
+
 // API Configuration
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -159,6 +190,9 @@ async function exportToNeo4j(uri, user, password) {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
+    // Save previous state
+    loadState();
+
     // Set up both resize handles
     setupResizable('resize1', '.panel:nth-child(1)', '.panel:nth-child(3)');
     setupResizable('resize2', '.panel:nth-child(3)', '.panel:nth-child(5)');
@@ -273,5 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initialize with some text
-    output.value = "Knowledge Base Interface Ready\n\n";
+    // only show the welcome text if we had nothing saved
+    if (!localStorage.getItem('output')) {
+        output.value = "Knowledge Base Interface Ready\n\n";
+    }
 });
