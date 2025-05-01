@@ -58,15 +58,20 @@ Reasoning Result:
 
 ```
 .
-├── data/                # Sample datasets and input files
-├── src/                 # Source code
-│   ├── tokenization.py  # Tokenization and POS tagging
-│   ├── parsing.py       # Sentence parsing and predicate formation
-│   ├── reasoning.py     # Logic evaluation and inference
-│   └── main.py          # Main entry point for the application
-├── tests/               # Unit tests
-├── requirements.txt     # Python dependencies
-└── README.md            # Project documentation
+├── src/                      # Source code
+│   ├── api.py                # Flask api used for deployment
+│   ├── knowledge_base.py     # Predicate storage and formatting 
+│   ├── main.py               # Main entry point for the application
+│   ├── nlp_processor.py      # Initialize the nlp module
+│   ├── persistence.py        # Storage into neo4j
+│   ├── semantic_parser.py    # Sentence parsing and predicate formation   
+│   ├── solve_questions.py    # Sample module for testing
+│   ├── ui.py                 # CLI for user interfacing
+│   ├── Front End/            # Web-based user interface
+│   │   ├── graph.html        # Displays the stored nodes
+│   │   ├── index.html        # Main page of the inference engine
+│   │   ├── script.js         # Handle requests 
+│   │   ├── styles.css        # Style for the website
 ```
 
 ## Contributions
