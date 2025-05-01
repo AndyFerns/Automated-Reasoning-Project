@@ -3,7 +3,7 @@ import re
 import uuid
 import logging
 from nlp_processor import NLPProcessor
-from pyswip import Prolog  # Prolog interface for proof
+from pyswip import Prolog  
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +46,7 @@ class SemanticParser:
             if "else" in sentence.lower():
                 return self._parse_if_else(sentence)
             return self._parse_conditional(sentence)
+        
         if sentence.lower().startswith("is "):
             return self._parse_query_fact(sentence)
         
@@ -68,58 +69,147 @@ class SemanticParser:
         return self._parse_fact(core)
 
     def parse_query(self, sentence: str) -> str:
-        
         """
-        Convert a query in either English (Is/Are/Does/Can/...) or raw Prolog
-        into a Prolog predicate string.
+        Convert an English or Prolog query into a Prolog goal:
+          - "is X the P of Y?" → P(X, Y)
+          - "does X V Y?"       → V(X, Y)
+          - existing 'is'/auxiliary handling
         """
-        # Clean up and normalize
+        # 0. Clean up
         sentence_clean = sentence.strip().rstrip("?").strip()
         if not sentence_clean:
             raise ValueError("Empty query provided.")
-        sentence_low = sentence_clean.lower()
+        s_low = sentence_clean.lower()
         
-        # Split to identify auxiliary
-        tokens = sentence_low.split()
+        # ——— New: “what does SUBJ VERB?” → VERB+s(SUBJ, X) ———
+        m = re.match(r"^what\s+(?:do|does|did)\s+(\w+)\s+(\w+)$", s_low)
+        if m:
+            subj, verb = m.groups()
+            # append 's' so it matches your stored fact predicate (likes, fathers, etc.)
+            return f"{verb}s({subj}, X)"
+
+        
+        # ——— Handle Wh-questions ———
+        m0 = re.match(r"^who\s+is\s+the\s+(\w+)\s+of\s+(\w+)$", s_low)
+        if m0:
+            pred, obj = m0.groups()
+            return f"{pred}(X, {obj})"
+        
+        # who likes tea?  → likes(X, tea)
+        m1 = re.match(r"^who\s+(.+)$", s_low)
+        if m1:
+            # drop the leading "who "
+            rest = m1.group(1).strip()
+            # parse the rest as if it were a normal fact
+            atom = self._parse_fact(rest)
+            # replace the first argument with X
+            return re.sub(r'^\s*([a-zA-Z_]\w*)\(\s*[^,]+', r'\1(X', atom)
+        
+        # ——— Special-case: “what is the P of Y?” → P(X, Y)
+        m2 = re.match(r"^what\s+is\s+the\s+(\w+)\s+of\s+(\w+)$", s_low)
+        if m2:
+            pred, obj = m2.groups()
+            return f"{pred}(X, {obj})"
+        
+        # what [does] john do? or what is X of Y?, etc
+        m3 = re.match(r"^what\s+(.+)$", s_low)
+        if m3:
+            rest = m3.group(1).strip()
+            # if it starts with an auxiliary, strip it
+            rest = re.sub(r'^(does|do|can|is|are|did)\s+', '', rest)
+            atom = self._parse_fact(rest)
+            # if it's unary like foo(X), keep as-is; if binary, replace the missing arg
+            if atom.count(",") == 0:
+                # foo(arg) → foo(X, arg)
+                name, args = atom.split("(", 1)
+                return f"{name}(X, {args}"
+            else:
+                # foo(arg1, arg2) → foo(X, arg2)
+                return re.sub(r'^\s*([a-zA-Z_]\w*\()\s*[^,]+,', r'\1X,', atom)
+
+        # ——— Existing special patterns ———
+
+        # Query pattern identifying
+        # 1. Pattern: is X the P of Y?
+        m_pat = re.match(r"^is\s+(\w+)\s+the\s+(\w+)\s+of\s+(\w+)$", s_low)
+        if m_pat:
+            subj, pred, obj = m_pat.groups()
+            return f"{pred}({subj}, {obj})"
+
+        # 2. Pattern: does X V Y?
+        m_pat2 = re.match(r"^(?:do|does|did)\s+(\\w+)\\s+(\\w+)\\s+(\\w+)$", s_low)
+        if m_pat2:
+            subj, verb, obj = m_pat2.groups()
+            return f"{verb}({subj}, {obj})"
+
+        # 3. Fallback to your existing auxiliary‐based logic
+        tokens = s_low.split()
         aux = tokens[0]
-        
-        # Handle 'is' and 'are' as unary/binary queries
+
         if aux in {"is", "are"}:
-            # e.g. "Is Andrew a man" or "Are dolphins intelligent"
-            return self._parse_query_fact(sentence_low)
-        
-        # Handle 'does', 'do', 'can', 'could', 'should', 'will', 'did', etc.
+            # e.g. "Is Andrew a man?"
+            return self._parse_query_fact(s_low)
+
         if aux in {"does", "do", "can", "could", "should", "will", "did"}:
-            # Strip the auxiliary and parse the core as a fact relationship
-            core = re.sub(rf"^{aux}\s+", "", sentence_low)
+            core = re.sub(rf"^{aux}\\s+", "", s_low)
             return self._parse_fact(core)
-        
-        # ——— NEW: handle declarative queries like "Socrates is mortal" ———
-        # if it contains " is " or " are " (and isn’t raw Prolog), parse as a query
-        if re.search(r"\b(is|are)\b", sentence_low):
-            return self._parse_query_fact(sentence_low)
-        
-        # Fallback: maybe already raw Prolog or a declarative English fact
-        # Detect raw Prolog by parentheses pattern
+
+        if re.search(r"\\b(is|are)\\b", s_low):
+            return self._parse_query_fact(s_low)
+
+        # Raw Prolog?
         if "(" in sentence_clean and ")" in sentence_clean:
-            return sentence_clean.rstrip('.')
-        # Otherwise, treat as an English declarative
+            return sentence_clean.rstrip(".")
+
+        # Last resort: re-parse as a normal sentence
         return self.parse_sentence(sentence_clean)
 
+    # Main method to convert english sentences to prolog clauses ->
     def assert_knowledge(self, sentences):
         """
         Parse English sentences into Prolog clauses and assert them.
+        Also, for every rule “Head :- Body” we automatically add its
+        negation “\+ Head :- \+ Body” under the hood.
         """
         for s in sentences:
             clauses = self.parse_sentence(s)
             for clause in clauses.splitlines():
-                # negative facts -> false :- predicate
+                # 1) existing negative‐fact handling
                 if clause.startswith("not_"):
                     pred = clause[len("not_"):]
                     self.prolog.assertz(f"false :- {pred}")
                 else:
+                    # assert the original
                     self.prolog.assertz(clause)
+                    # 2) if it’s a rule, assert the inverted negation
+                    if ":-" in clause:
+                        head, body = [part.strip() for part in clause.split(":-", 1)]
+                        neg_head = self._negate_predicate(head)
+                        neg_body = self._negate_predicate(body)
+                        if neg_head and neg_body:
+                            # silently add the flipped‐negation rule
+                            self.prolog.assertz(f"{neg_head} :- {neg_body}")
+
         logger.info("Knowledge base loaded with %d sentences.", len(sentences))
+
+    def _negate_predicate(self, atom: str) -> str:
+        """
+        Given a Prolog atom or a comma‐separated body:
+        - foo(X)           → \+ foo(X)
+        - (foo(X), bar(X)) → \+ (foo(X), bar(X))
+        - already negated → left as‐is
+        """
+        atom = atom.strip()
+        # already negated?
+        if atom.startswith(r"\+"):
+            return atom
+        # multi‐body
+        if "," in atom:
+            return f"\\+ ({atom})"
+        # single‐predicate
+        if re.match(r"^[A-Za-z_]\w*\(.*\)$", atom):
+            return rf"\\+ {atom}"
+        return None
 
     def prove_exists(self, query: str) -> bool:
         """
@@ -141,6 +231,9 @@ class SemanticParser:
         return rf"{then_pred} :- {cond_pred}\n{else_pred} :- \+ {cond_pred}"
 
     def _parse_conditional(self, sentence: str) -> str:
+        """
+        Handles sentences in the form of If X, then Y
+        """
         pattern = re.compile(r"^if\s+(.*?),\s*then\s+(.*)$", re.IGNORECASE)
         m = pattern.match(sentence)
         if not m:
@@ -156,7 +249,6 @@ class SemanticParser:
         Handle sentences like 'All men are mortal' -> mortal(X) :- men(X)
         Identify quantifier and subject noun
         """
-        
         quantifier = None
         subject = None
         for token in doc:
@@ -195,7 +287,10 @@ class SemanticParser:
         return f"{head} :- {body}"
 
     def _parse_existential(self, sentence: str, doc) -> str:
-        # For simple existential facts ("Some dolphins are intelligent"), treat as a fact
+        """ 
+        For simple existential facts ("Some dolphins are intelligent"),
+        treat as a fact
+        """
         if re.search(r"\b(some|a|an)\b", sentence.lower()) and re.search(r"\b(is|are)\b", sentence.lower()):
             return self._parse_fact(sentence, doc)
 
@@ -332,7 +427,6 @@ class SemanticParser:
         remainder = re.sub(r"^(?:a|an|the)\s+", "", parts[1].strip(), flags=re.IGNORECASE)
         pred_name = re.sub(r"[^\w]", "_", remainder)
         return f"{pred_name}({subject})"
-
 
 
     def _convert_to_predicate(self, text: str, subject: str) -> str:
