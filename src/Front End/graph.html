@@ -8,11 +8,9 @@
   <script src="https://unpkg.com/neovis.js/dist/neovis.js"></script>
 </head>
 <body>
-  <!-- Menu Bar with Back -->
+  <!-- Menu Bar -->
   <div class="menu-bar">
-    <div class="menu-item">
-      <a href="index.html" style="color:inherit; text-decoration:none;">← Back</a>
-    </div>
+    <div class="menu-item"><a href="index.html">← Back</a></div>
     <div class="menu-item">File</div>
     <div class="menu-item">Edit</div>
     <div class="menu-item">View</div>
@@ -21,182 +19,128 @@
   </div>
 
   <!-- Graph Panel -->
-    <div class="container" style="flex-direction: column; padding:0;">
-        <div class="panel" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-        <div class="panel-header">
-            <span>Neo4j Graph Viewer</span>
+  <div class="container" style="flex-direction: column; padding:0;">
+    <div class="panel" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+      <div class="panel-header"><span>Neo4j Graph Viewer</span></div>
+      <div class="panel-content" style="position: relative;">
+        <div id="neo4j-graph" style="flex:1; width:100%; height:100%;"></div>
+        <!-- PROPERTY BAR -->
+        <div id="prop-bar">
+          <div id="prop-bar-close" style="cursor:pointer;">×</div>
+          <h4>Properties</h4>
+          <div id="prop-list"></div>
         </div>
-
-        <!-- wrap your graph inside panel-content -->
-        <div class="panel-content">
-            <!-- full-stretch graph area -->
-            <div id="neo4j-graph" style="flex:1; width:100%; height:100%;"></div>
-
-            <!-- PROPERTY BAR -->
-            <div id="prop-bar" class="hidden">
-                <div id="prop-bar-close">×</div>
-                <h4>Node Properties</h4>
-                <div id="prop-list"></div>
-            </div>
-        </div>
-        </div>
+      </div>
     </div>
-
-  <!-- Status Bar -->
-  <div class="status-bar">
-    <span id="status-message">Waiting for credentials…</span>
   </div>
+  <div class="status-bar"><span id="status-message">Waiting for credentials…</span></div>
 
-  <!-- Credentials Modal -->
+  <!-- CREDENTIALS MODAL -->
   <div class="modal" id="creds-modal">
     <div class="modal-content">
-      <div class="modal-header">
-        <div class="modal-title">Connect to Neo4j</div>
-        <div class="close-modal">&times;</div>
-      </div>
-      <div class="form-group">
-        <label for="neo4j-uri">Bolt URI</label>
-        <input type="text" id="neo4j-uri"
-               placeholder="bolt://localhost:7687"
-               value="bolt://localhost:7687"/>
-      </div>
-      <div class="form-group">
-        <label for="neo4j-user">Username</label>
-        <input type="text" id="neo4j-user" placeholder="neo4j" value="neo4j"/>
-      </div>
-      <div class="form-group">
-        <label for="neo4j-password">Password</label>
-        <input type="password" id="neo4j-password" placeholder="password"/>
-      </div>
-      <div class="modal-actions">
-        <button id="cancel-creds">Cancel</button>
-        <button id="confirm-creds">Connect</button>
-      </div>
+      <div class="modal-header"><div class="modal-title">Connect to Neo4j</div><div class="close-modal">&times;</div></div>
+      <div class="form-group"><label for="neo4j-uri">Bolt URI</label><input id="neo4j-uri" value="bolt://localhost:7687"/></div>
+      <div class="form-group"><label for="neo4j-user">Username</label><input id="neo4j-user" value="neo4j"/></div>
+      <div class="form-group"><label for="neo4j-password">Password</label><input id="neo4j-password" type="password"/></div>
+      <div class="modal-actions"><button id="cancel-creds">Cancel</button><button id="confirm-creds">Connect</button></div>
     </div>
   </div>
 
   <script>
-        const statusEl = document.getElementById("status-message");
-        const credsModal = document.getElementById("creds-modal");
-        const closeModalBtn = credsModal.querySelector(".close-modal");
-        const cancelBtn = document.getElementById("cancel-creds");
-        const confirmBtn = document.getElementById("confirm-creds");
-    
-        function setStatus(msg) {
-          statusEl.textContent = msg;
+    // UI helpers
+    const statusEl = document.getElementById("status-message");
+    const credsModal = document.getElementById("creds-modal");
+    function setStatus(msg){ statusEl.textContent = msg; }
+    function showCreds(){ credsModal.style.display = 'flex'; }
+    function hideCreds(){ credsModal.style.display = 'none'; }
+
+    document.querySelector('.close-modal').onclick = () => { setStatus('Cancelled'); hideCreds(); };
+    document.getElementById('cancel-creds').onclick = () => { setStatus('Cancelled'); hideCreds(); };
+    document.getElementById('confirm-creds').onclick = () => {
+      const uri = document.getElementById('neo4j-uri').value,
+            user = document.getElementById('neo4j-user').value,
+            pwd  = document.getElementById('neo4j-password').value;
+      if(!uri||!user||!pwd){ alert('All fields required'); return; }
+      hideCreds(); renderGraph({uri,user,pwd});
+    };
+
+
+    async function renderGraph({uri,user,pwd}){
+      setStatus('Connecting…');
+      
+      // neo4j configuration
+      const config = {
+        containerId: 'neo4j-graph',
+        neo4j: { serverUrl:uri, serverUser:user, serverPassword:pwd },
+        serverDatabase: 'neo4j', encrypted: 'ENCRYPTION_OFF', trust:'TRUST_ALL_CERTIFICATES',
+        labels: { 
+          '*': { caption:'type'} 
+        },
+        labels: { 
+          'Entity': { caption:'name', 
+          title_properties:['name', 'type'] } 
+        },
+        relationships: { 
+          '*': { 
+            caption:'type', 
+            thickness:'weight', 
+            value:'id'} 
+        },
+        visConfig: {
+          nodes: {
+            shape: 'dot',
+            size: 25,
+          },
+          edges: {
+            arrows: { to: { enabled: true } },
+            smooth: {} //enabled: true, type: 'curvedCW', roundness: 0.25 
+          },
+          physics: { stabilization: true }
+        },
+
+        initialCypher: `
+        MATCH (n)-[r]->(m)
+        RETURN n, r, m, id(r) AS id
+        UNION
+        MATCH (n)<-[r]-(m)
+        RETURN n, r, m, id(r) AS id
+      `
+      //initialCypher: 'MATCH (n)-[r]-(m) RETURN n,r,m'
+      };
+
+      const viz = new NeoVis.default(config);
+      viz.registerOnEvent('completed', ()=>{
+        const net = viz.network, nodes = viz.nodes, edges = viz.edges;
+        const propBar = document.getElementById('prop-bar'), list = document.getElementById('prop-list');
+        let pinned = null;
+
+        function showProps(raw){
+          list.innerHTML = '';
+          // show labels/types
+          if(raw.labels) raw.labels.forEach(l=>{ let d=document.createElement('div'); d.textContent='Label: '+l; list.appendChild(d); });
+          if(raw.type) { let d=document.createElement('div'); d.textContent='Type: '+raw.type; list.appendChild(d); }
+          // all properties
+          Object.entries(raw.properties||{}).forEach(([k,v])=>{
+            let d=document.createElement('div'); d.textContent=`${k}: ${v}`; list.appendChild(d);
+          });
+          propBar.style.display='block';
         }
-        function showCreds() { credsModal.style.display = "flex"; }
-        function hideCreds() { credsModal.style.display = "none"; }
-    
-        closeModalBtn.onclick = cancelBtn.onclick = () => {
-          setStatus("Connection cancelled");
-          hideCreds();
-        };
-    
-        confirmBtn.addEventListener("click", () => {
-          const uri      = document.getElementById("neo4j-uri").value.trim();
-          const user     = document.getElementById("neo4j-user").value.trim();
-          const password = document.getElementById("neo4j-password").value;
-          if (!uri || !user || !password) {
-            alert("Please fill in all fields");
-            return;
-          }
-          hideCreds();
-          renderGraph({ uri, user, password });
+        function hideProps(){ if(!pinned) propBar.style.display='none'; }
+
+        net.on('hoverNode', params=>{ if(!pinned){ const n=nodes.get(params.node); showProps(n.raw||n);} });
+        net.on('blurNode', ()=>hideProps());
+        net.on('click', params=>{
+          if(params.nodes.length===1){ pinned=params.nodes[0]; const n=nodes.get(pinned); showProps(n.raw||n);} 
+          else if(params.edges.length===1){ pinned='e'; const e=edges.get(params.edges[0]); showProps(e.raw||e);} 
+          else { pinned=null; hideProps(); }
         });
-        
-        // Graph rendering logic
-        async function renderGraph({ uri, user, password }) {
-            setStatus("Connecting to Neo4j…");
-            try {
-              const config = {
-                containerId:    "neo4j-graph",
-                neo4j: {
-                  serverUrl:      uri,
-                  serverUser:     user,
-                  serverPassword: password
-                },
-                serverDatabase: "neo4j",
-                encrypted:      "ENCRYPTION_OFF",
-                trust:          "TRUST_ALL_CERTIFICATES",
-                labels:         {},  // leave blank for dynamic labeling
-                relationships:  {},
-                initialCypher:  "MATCH (n)-[r]->(m) RETURN n,r,m"
-              };
-        
-              const viz = new NeoVis.default(config);
-        
-              
-              // ← hook into the 'completed' event
-              viz.registerOnEvent("completed", () => {
-                const net    = viz.network;
-                const nodes  = viz.nodes;
-                const propBar    = document.getElementById("prop-bar");
-                const propList   = document.getElementById("prop-list");
-                const propClose  = document.getElementById("prop-bar-close");
-                let pinnedNodeId = null;
-          
-                function showProps(nodeId, x, y) {
-                  const node = nodes.get(nodeId);
-                  const props = node.properties || {};
-                  propList.innerHTML = ""; 
-                  Object.entries(props).forEach(([k, v]) => {
-                    const el = document.createElement("div");
-                    el.textContent = `${k}: ${v}`;
-                    propList.appendChild(el);
-                  });
-                  // position near top-right (or use x,y to float near cursor)
-                  propBar.style.top  = "10px";
-                  propBar.style.right = "10px";
-                  propBar.classList.remove("hidden");
-                }
-          
-                function hideProps() {
-                  if (pinnedNodeId === null) {
-                    propBar.classList.add("hidden");
-                  }
-                }
-          
-                // hover → show, blur → hide (unless pinned)
-                net.on("hoverNode", params => {
-                  if (pinnedNodeId === null) {
-                    showProps(params.node);
-                  }
-                });
-                net.on("blurNode", () => {
-                  hideProps();
-                });
-          
-                // click → pin/unpin
-                net.on("click", params => {
-                  if (params.nodes.length === 1) {
-                    // clicked a node: pin it
-                    pinnedNodeId = params.nodes[0];
-                    showProps(pinnedNodeId);
-                  } else {
-                    // clicked empty space: unpin + hide
-                    pinnedNodeId = null;
-                    propBar.classList.add("hidden");
-                  }
-                });
-          
-                // close button to unpin
-                propClose.addEventListener("click", () => {
-                  pinnedNodeId = null;
-                  propBar.classList.add("hidden");
-                });
-          
-                setStatus("Graph ready!");
-              });
-          
-              await viz.render();
-        
-            } catch (err) {
-              console.error(err);
-              setStatus("Auth error: check credentials");
-              showCreds();
-            }
-          }
-        
-    document.addEventListener("DOMContentLoaded", showCreds);
-</script>
+        document.getElementById('prop-bar-close').onclick = ()=>{ pinned=null; hideProps(); };
+        setStatus('Graph ready!');
+      });
+      try{ await viz.render(); }
+      catch(e){ console.error(e); setStatus('Error'); showCreds(); }
+    }
+    document.addEventListener('DOMContentLoaded', showCreds);
+  </script>
+</body>
+</html>

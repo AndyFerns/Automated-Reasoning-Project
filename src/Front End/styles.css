@@ -227,4 +227,8 @@ textarea {
 #prop-list div {
     margin-bottom: 4px;
 }
+
+#neo4j-graph {
+    height: 100%; /* or 100% if parent has height */
+}
   
