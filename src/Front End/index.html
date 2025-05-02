@@ -8,41 +8,47 @@
 </head>
 <body>
     <!-- Menu Bar -->
-    <div class="menu-bar">
-        <div class="menu-item dropdown">
-            File
-            <div class="dropdown-content">
-                <a onclick="openFile()">Open…</a>
-                <a onclick="saveGraph()">Save</a>
-                <a onclick="exportJSON()">Export JSON</a>
-            </div>
+<!-- Menu Bar for index.html -->
+<div class="menu-bar">
+    <!-- File Menu -->
+    <div class="menu-item dropdown">
+        File
+        <div class="dropdown-content">
+            <a href="#" onclick="loadKB()">Load KB…</a>
+            <a href="#" onclick="saveKB()">Save KB</a>
+            <a href="#" onclick="clearKB()">Clear KB</a>
         </div>
-      
-        <div class="menu-item dropdown">
-            View
-            <div class="dropdown-content">
-                <a onclick="zoomIn()">Zoom In</a>
-                <a onclick="zoomOut()">Zoom Out</a>
-                <a onclick="resetView()">Reset View</a>
-            </div>
+    </div>
+  
+    <!-- Edit Menu -->
+    <div class="menu-item dropdown">
+        Edit
+        <div class="dropdown-content">
+            <a href="#" onclick="clearInput()">Clear Input</a>
+            <a href="#" onclick="clearOutput()">Clear Output</a>
+            <a href="#" onclick="copyOutput()">Copy Output</a>
         </div>
-      
-        <div class="menu-item dropdown">
-            Tools
-            <div class="dropdown-content">
-                <a onclick="togglePhysics()">Toggle Physics</a>
-                <a onclick="highlightPaths()">Highlight Paths</a>
-            </div>
+    </div>
+  
+    <!-- Run Menu -->
+    <div class="menu-item dropdown">
+        Run
+        <div class="dropdown-content">
+            <a href="#" onclick="executeAll()">Run All Statements</a>
+            <a href="#" onclick="runQuery()">Run Current Query</a>
+            <a href="#" onclick="validateSyntax()">Validate Syntax</a>
         </div>
-      
-        <div class="menu-item dropdown">
-            Help
-            <div class="dropdown-content">
-                <a onclick="showAbout()">About</a>
-                <a onclick="showDocumentation()">Documentation</a>
-            </div>
+    </div>
+  
+    <!-- Help Menu -->
+    <div class="menu-item dropdown">
+        Help
+        <div class="dropdown-content">
+            <a href="#" onclick="showAbout()">About</a>
+            <a href="#" onclick="showDocumentation()">Documentation</a>
         </div>
-      </div>
+    </div>
+  </div>
 
     <!-- Input Panels -->
     <div class="container">
