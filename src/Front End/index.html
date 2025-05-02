@@ -7,14 +7,44 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Menu Bar -->
     <div class="menu-bar">
-        <div class="menu-item">File</div>
-        <div class="menu-item">Edit</div>
-        <div class="menu-item">View</div>
-        <div class="menu-item">Tools</div>
-        <div class="menu-item">Help</div>
-    </div>
+        <div class="menu-item dropdown">
+            File
+            <div class="dropdown-content">
+                <a onclick="openFile()">Open…</a>
+                <a onclick="saveGraph()">Save</a>
+                <a onclick="exportJSON()">Export JSON</a>
+            </div>
+        </div>
+      
+        <div class="menu-item dropdown">
+            View
+            <div class="dropdown-content">
+                <a onclick="zoomIn()">Zoom In</a>
+                <a onclick="zoomOut()">Zoom Out</a>
+                <a onclick="resetView()">Reset View</a>
+            </div>
+        </div>
+      
+        <div class="menu-item dropdown">
+            Tools
+            <div class="dropdown-content">
+                <a onclick="togglePhysics()">Toggle Physics</a>
+                <a onclick="highlightPaths()">Highlight Paths</a>
+            </div>
+        </div>
+      
+        <div class="menu-item dropdown">
+            Help
+            <div class="dropdown-content">
+                <a onclick="showAbout()">About</a>
+                <a onclick="showDocumentation()">Documentation</a>
+            </div>
+        </div>
+      </div>
 
+    <!-- Input Panels -->
     <div class="container">
         <div class="panel input-panel">
             <div class="panel-header">

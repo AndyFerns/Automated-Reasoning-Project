@@ -8,6 +8,43 @@ function saveState() {
         console.warn('Could not save state:', e);
     }
 }
+
+// Call on every page load
+window.addEventListener('DOMContentLoaded', () => {
+    // Detect navigation type: “reload” vs “navigate” (link click)
+    let navType = 'navigate';
+    if (performance.getEntriesByType) {
+        const [nav] = performance.getEntriesByType('navigation') || [];
+        navType = nav ? nav.type : navType;
+    } else if (performance.navigation) {
+        navType = (performance.navigation.type === 1) ? 'reload' : 'navigate';
+    }
+
+    if (navType === 'reload') {
+        // 1) True refresh: clear sessionStorage and wipe all inputs & outputs
+        sessionStorage.clear();
+        document.querySelectorAll('input, textarea').forEach(el => el.value = '');
+        // example of wiping an output area:
+        const status = document.getElementById('status-message');
+        if (status) status.textContent = 'Waiting for credentials…';
+        const propList = document.getElementById('prop-list');
+        if (propList) propList.innerHTML = '';
+    } else {
+        // 2) Navigation between pages: restore saved values
+        document.querySelectorAll('input, textarea').forEach(el => {
+            const saved = sessionStorage.getItem(el.id);
+            if (saved !== null) el.value = saved;
+        });
+    }
+
+    // 3) On any change, always store the latest value in sessionStorage
+    document.querySelectorAll('input, textarea').forEach(el => {
+        el.addEventListener('input', () => {
+            sessionStorage.setItem(el.id, el.value);
+        });
+    });
+});
+
 // Loads latest saved state
 function loadState() {
     try {
@@ -312,3 +349,83 @@ document.addEventListener('DOMContentLoaded', () => {
         output.value = "Knowledge Base Interface Ready\n\n";
     }
 });
+
+
+// Menu bar options:
+function openFile() {
+    // Prompt user for a local JSON or Cypher file and re-render graph
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.cypher,.txt';
+    input.onchange = e => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        // you could parse JSON or Cypher then call viz.renderWith(…) 
+        console.log('Loaded file contents:', reader.result);
+        setStatus(`Loaded ${file.name}`);
+        // TODO: feed reader.result into NeoVis or your own loader
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+}
+
+
+function saveGraph() {
+    // Serialize current network to JSON and download
+    const data = viz.network.export(); // vis.js export assuming method
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'graph-export.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus('Graph saved as graph-export.json');
+  }
+  
+  function exportJSON() {
+    // Alias for saveGraph – same functionality
+    saveGraph();
+  }
+  
+  // ---------- View Menu ----------
+  
+  function zoomIn() {
+    viz.network.moveTo({ scale: viz.network.getScale() * 1.2 });
+    setStatus('Zoomed in');
+  }
+  
+  function zoomOut() {
+    viz.network.moveTo({ scale: viz.network.getScale() * 0.8 });
+    setStatus('Zoomed out');
+  }
+  
+  function resetView() {
+    viz.network.fit();
+    setStatus('View reset');
+  }
+  
+  // ---------- Tools Menu ----------
+  
+  function togglePhysics() {
+    const params = viz.network.getOptions().physics;
+    viz.network.setOptions({ physics: { enabled: !params.enabled } });
+    setStatus(`Physics ${!params.enabled ? 'enabled' : 'disabled'}`);
+  }
+  
+  function highlightPaths() {
+    // Example stub: you might implement Dijkstra or shortest-path highlighting
+    alert('Path-highlighting coming soon!');
+  }
+  
+  // ---------- Help Menu ----------
+  
+  function showAbout() {
+    alert('Neo4j Graph Viewer v1.0\nBuilt with Neovis.js');
+  }
+  
+  function showDocumentation() {
+    window.open('https://github.com/AndyFerns/Automated-Reasoning-Project#readme', '_blank');
+  }
