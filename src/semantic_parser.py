@@ -150,8 +150,23 @@ class SemanticParser:
             # e.g. "Is Andrew a man?"
             return self._parse_query_fact(s_low)
 
-        if aux in {"does", "do", "can", "could", "should", "will", "did"}:
-            core = re.sub(rf"^{aux}\\s+", "", s_low)
+        if aux in {"does", "do", "did"}:
+            # Strip the auxiliary
+            core = re.sub(rf"^{aux}\s+", "", s_low)
+        
+        # Special-case: "does X V Y?" → V+'s'(X, Y)
+        m = re.match(r"^(\w+)\s+(\w+)\s+(\w+)$", core)
+        if m:
+            subj, verb, obj = m.groups()
+            # pluralize the predicate so that 'like' → 'likes'
+            pred = verb if verb.endswith('s') else verb + 's'
+            return f"{pred}({subj}, {obj})"
+        # # fallback to your old parse_fact logic
+        # return self._parse_fact(core)
+
+        # Allow other auxiliaries (can/could/should/will) to use _parse_fact
+        if aux in {"can", "could", "should", "will"}:
+            core = re.sub(rf"^{aux}\s+", "", s_low)
             return self._parse_fact(core)
 
         if re.search(r"\\b(is|are)\\b", s_low):
