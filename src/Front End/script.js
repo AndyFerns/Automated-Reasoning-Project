@@ -351,81 +351,115 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// Menu bar options:
-function openFile() {
-    // Prompt user for a local JSON or Cypher file and re-render graph
+// ---------- File Menu Actions ----------
+
+// Load a JSON or text file of English sentences as your KB
+function loadKB() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.cypher,.txt';
+    input.accept = '.txt,.json';
     input.onchange = e => {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = () => {
-        // you could parse JSON or Cypher then call viz.renderWith(…) 
-        console.log('Loaded file contents:', reader.result);
-        setStatus(`Loaded ${file.name}`);
-        // TODO: feed reader.result into NeoVis or your own loader
+        const lines = reader.result.split(/\r?\n/).filter(Boolean);
+        // assume you have an array `kbSentences` and a display area
+        kbSentences = lines;
+        displayStatus(`Loaded KB: ${file.name} (${lines.length} statements)`);
+        refreshKBDisplay();
       };
       reader.readAsText(file);
     };
     input.click();
-}
-
-
-function saveGraph() {
-    // Serialize current network to JSON and download
-    const data = viz.network.export(); // vis.js export assuming method
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  }
+  
+  // Save current KB to a JSON file
+  function saveKB() {
+    const blob = new Blob([JSON.stringify(kbSentences, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'graph-export.json';
+    a.download = 'knowledge_base.json';
     a.click();
     URL.revokeObjectURL(url);
-    setStatus('Graph saved as graph-export.json');
+    displayStatus('Knowledge base saved.');
   }
   
-  function exportJSON() {
-    // Alias for saveGraph – same functionality
-    saveGraph();
+  // Clear the in-memory KB
+  function clearKB() {
+    if (!confirm('Clear all loaded statements?')) return;
+    kbSentences = [];
+    refreshKBDisplay();
+    displayStatus('Knowledge base cleared.');
   }
   
-  // ---------- View Menu ----------
+  // ---------- Edit Menu Actions ----------
   
-  function zoomIn() {
-    viz.network.moveTo({ scale: viz.network.getScale() * 1.2 });
-    setStatus('Zoomed in');
+  // Clear the English-sentence input textarea
+  function clearInput() {
+    document.getElementById('input-area').value = '';
+    displayStatus('Input cleared.');
   }
   
-  function zoomOut() {
-    viz.network.moveTo({ scale: viz.network.getScale() * 0.8 });
-    setStatus('Zoomed out');
+  // Clear the query/output display area
+  function clearOutput() {
+    document.getElementById('output-area').textContent = '';
+    displayStatus('Output cleared.');
   }
   
-  function resetView() {
-    viz.network.fit();
-    setStatus('View reset');
+  // Copy the output text to clipboard
+  function copyOutput() {
+    const out = document.getElementById('output-area').textContent;
+    navigator.clipboard.writeText(out).then(
+      () => displayStatus('Output copied to clipboard.'),
+      () => displayStatus('Failed to copy output.')
+    );
   }
   
-  // ---------- Tools Menu ----------
+  // ---------- Run Menu Actions ----------
   
-  function togglePhysics() {
-    const params = viz.network.getOptions().physics;
-    viz.network.setOptions({ physics: { enabled: !params.enabled } });
-    setStatus(`Physics ${!params.enabled ? 'enabled' : 'disabled'}`);
+  // Parse & assert all loaded statements, then report success
+  function executeAll() {
+    parser.assert_knowledge(kbSentences);
+    displayStatus(`Asserted ${kbSentences.length} statements.`);
   }
   
-  function highlightPaths() {
-    // Example stub: you might implement Dijkstra or shortest-path highlighting
-    alert('Path-highlighting coming soon!');
+  // Run whatever is in the query input field
+  function runQuery() {
+    const q = document.getElementById('query-input').value;
+    if (!q.trim()) { displayStatus('No query entered.'); return; }
+    try {
+      const goal = parser.parse_query(q);
+      const sols = kb.query_all(goal);
+      document.getElementById('output-area').textContent = JSON.stringify(sols, null, 2);
+      displayStatus(`Query returned ${sols.length} solution(s).`);
+    } catch (err) {
+      displayStatus('Query error: ' + err.message);
+    }
   }
   
-  // ---------- Help Menu ----------
+  // Quick syntax check without asserting to Prolog
+  function validateSyntax() {
+    const q = document.getElementById('query-input').value;
+    try {
+      parser.parse_query(q);
+      displayStatus('Syntax OK.');
+    } catch (err) {
+      displayStatus('Syntax error: ' + err.message);
+    }
+  }
+  
+  // ---------- Help Menu Actions ----------
   
   function showAbout() {
-    alert('Neo4j Graph Viewer v1.0\nBuilt with Neovis.js');
+    alert('Logic Analyzer v1.0\nBuilt with SemanticParser + PySwip');
   }
   
   function showDocumentation() {
     window.open('https://github.com/AndyFerns/Automated-Reasoning-Project#readme', '_blank');
+  }
+  
+  // ---------- Utility: status bar updater ----------
+  function displayStatus(msg) {
+    document.getElementById('status-message').textContent = msg;
   }
