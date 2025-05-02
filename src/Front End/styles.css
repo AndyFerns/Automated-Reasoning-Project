@@ -37,13 +37,15 @@ body {
     background-color: #4c4c4c;
 }
 
+
+/* Better contrast for dropdown menus */
 .dropdown-content {
     display: none;
     position: absolute;
     top: 100%;
     left: 0;
-    background:#4c4c4c;
-    color: black;
+    background: #f9f9f9;
+    color: #333;
     min-width: 150px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     z-index: 1000;
@@ -53,15 +55,20 @@ body {
     display: block;
     padding: 0.5em 1em;
     text-decoration: none;
-    color: inherit;
+    color: #333;
 }
 
 .dropdown-content a:hover {
-    background: #4c4c4c;
+    background: #eee;
 }
 
 .menu-item.dropdown:hover .dropdown-content {
-    display: block;  
+    display: block;
+}
+
+/* Ensure each dropdown menu is positioned relative to its parent */
+.menu-item.dropdown {
+    position: relative;
 }
 
 .container {
