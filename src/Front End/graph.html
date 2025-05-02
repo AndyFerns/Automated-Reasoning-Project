@@ -9,16 +9,51 @@
 </head>
 <body>
 
-  <!-- Menu Bar -->
-  <div class="menu-bar">
-    <div class="menu-item"><a href="index.html">← Back</a></div>
-    <div class="menu-item">File</div>
-    <div class="menu-item">Edit</div>
-    <div class="menu-item">View</div>
-    <div class="menu-item">Tools</div>
-    <div class="menu-item">Help</div>
+<!-- Menu Bar -->
+<div class="menu-bar">
+  <!-- Back button -->
+    <div class="menu-item">
+      <a href="index.html">← Back</a>
+    </div>
+  
+    <!-- File dropdown -->
+    <div class="menu-item dropdown">
+      File
+      <div class="dropdown-content">
+        <a href="#" onclick="openFile()">Open…</a>
+        <a href="#" onclick="saveGraph()">Save</a>
+        <a href="#" onclick="exportJSON()">Export JSON</a>
+      </div>
+    </div>
+  
+    <!-- View dropdown -->
+    <div class="menu-item dropdown">
+      View
+      <div class="dropdown-content">
+        <a href="#" onclick="zoomIn()">Zoom In</a>
+        <a href="#" onclick="zoomOut()">Zoom Out</a>
+        <a href="#" onclick="resetView()">Reset View</a>
+      </div>
+    </div>
+  
+    <!-- Tools dropdown -->
+    <div class="menu-item dropdown">
+      Tools
+      <div class="dropdown-content">
+        <a href="#" onclick="togglePhysics()">Toggle Physics</a>
+        <a href="#" onclick="highlightPaths()">Highlight Paths</a>
+      </div>
+    </div>
+  
+    <!-- Help dropdown -->
+    <div class="menu-item dropdown">
+      Help
+      <div class="dropdown-content">
+        <a href="#" onclick="showAbout()">About</a>
+        <a href="#" onclick="showDocumentation()">Documentation</a>
+      </div>
+    </div>
   </div>
-
   
   <!-- Graph Panel -->
   <div class="container" style="flex-direction: column; padding:0;">
@@ -142,6 +177,86 @@
       try{ await viz.render(); }
       catch(e){ console.error(e); setStatus('Error'); showCreds(); }
     }
+
+    
+// Menu bar options:
+function openFile() {
+  // Prompt user for a local JSON or Cypher file and re-render graph
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.cypher,.txt';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      // you could parse JSON or Cypher then call viz.renderWith(…) 
+      console.log('Loaded file contents:', reader.result);
+      setStatus(`Loaded ${file.name}`);
+      // TODO: feed reader.result into NeoVis or your own loader
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+
+function saveGraph() {
+  // Serialize current network to JSON and download
+  const data = viz.network.export(); // vis.js export assuming method
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'graph-export.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('Graph saved as graph-export.json');
+}
+
+function exportJSON() {
+  // Alias for saveGraph – same functionality
+  saveGraph();
+}
+
+// ---------- View Menu ----------
+
+function zoomIn() {
+  viz.network.moveTo({ scale: viz.network.getScale() * 1.2 });
+  setStatus('Zoomed in');
+}
+
+function zoomOut() {
+  viz.network.moveTo({ scale: viz.network.getScale() * 0.8 });
+  setStatus('Zoomed out');
+}
+
+function resetView() {
+  viz.network.fit();
+  setStatus('View reset');
+}
+
+// ---------- Tools Menu ----------
+
+function togglePhysics() {
+  const params = viz.network.getOptions().physics;
+  viz.network.setOptions({ physics: { enabled: !params.enabled } });
+  setStatus(`Physics ${!params.enabled ? 'enabled' : 'disabled'}`);
+}
+
+function highlightPaths() {
+  // Example stub: you might implement Dijkstra or shortest-path highlighting
+  alert('Path-highlighting coming soon!');
+}
+
+// ---------- Help Menu ----------
+
+function showAbout() {
+  alert('Neo4j Graph Viewer v1.0\nBuilt with Neovis.js');
+}
+
+function showDocumentation() {
+  window.open('https://github.com/AndyFerns/Automated-Reasoning-Project#readme', '_blank');
+}
     document.addEventListener('DOMContentLoaded', showCreds);
   </script>
 </body>
