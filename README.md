@@ -58,20 +58,29 @@ Reasoning Result:
 
 ```
 .
-├── src/                      # Source code
-│   ├── api.py                # Flask api used for deployment
-│   ├── knowledge_base.py     # Predicate storage and formatting 
-│   ├── main.py               # Main entry point for the application
-│   ├── nlp_processor.py      # Initialize the nlp module
-│   ├── persistence.py        # Storage into neo4j
-│   ├── semantic_parser.py    # Sentence parsing and predicate formation   
-│   ├── solve_questions.py    # Sample module for testing
-│   ├── ui.py                 # CLI for user interfacing
-│   ├── Front End/            # Web-based user interface
-│   │   ├── graph.html        # Displays the stored nodes
-│   │   ├── index.html        # Main page of the inference engine
-│   │   ├── script.js         # Handle requests 
-│   │   ├── styles.css        # Style for the website
+├── .gitignore
+├── documentation/
+├── predicates.txt
+├── README.md
+├── requirements.txt
+├── src/
+│   ├── api.py
+│   ├── Front End/
+│   │   ├── graph.html
+│   │   ├── index.html
+│   │   ├── script.js
+│   │   ├── styles.css
+│   ├── knowledge_base.py
+│   ├── main.py
+│   ├── nlp_processor.py
+│   ├── persistence.py
+│   ├── semantic_parser.py
+│   ├── solve_questions.py
+│   ├── ui.py
+├── testing/
+│   ├── Questions.txt
+│   ├── sample statements.txt
+
 ```
 
 ## Contributions
